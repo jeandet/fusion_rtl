@@ -1,0 +1,16 @@
+TOP:=$(shell realpath --relative-to $(CURDIR)/../ $(CURDIR))
+
+SIM ?= icarus
+TOPLEVEL_LANG ?= verilog
+WAVES = 1
+
+VITALS_PATH = /usr/share/yosys/ecp5
+VERILOG_INCLUDE_DIRS = $(VITALS_PATH)
+VERILOG_SOURCES =  $(CURDIR)/build/top.v $(VITALS_PATH)/cells_sim.v 
+
+TOPLEVEL = top
+
+MODULE = test
+
+
+include $(shell cocotb-config --makefiles)/Makefile.sim
