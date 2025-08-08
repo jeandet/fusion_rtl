@@ -1,0 +1,12 @@
+diff --git a/litex_boards/targets/radiona_ulx3s.py b/litex_boards/targets/radiona_ulx3s.py
+index 15c1298..6739c42 100755
+--- a/litex_boards/targets/radiona_ulx3s.py
++++ b/litex_boards/targets/radiona_ulx3s.py
+@@ -81,7 +81,7 @@ class _CRG(LiteXModule):
+         self.specials += DDROutput(1, 0, platform.request("sdram_clock"), sdram_clk)
+ 
+         # Prevent ESP32 from resetting FPGA
+-        self.comb += platform.request("wifi_gpio0").eq(1)
++        self.comb += platform.request("wifi_gpio0").eq(0)
+ 
+ # BaseSoC ------------------------------------------------------------------------------------------
