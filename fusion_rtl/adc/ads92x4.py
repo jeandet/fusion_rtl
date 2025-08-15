@@ -1,6 +1,6 @@
 from litex.gen import *
 from litex.soc.cores.clock.common import *
-
+from litex.soc.interconnect import stream
 
 class Ads92x4(LiteXModule):
     def __init__(self, smp_clk_is_synchronous=True, oversampling=1, zone=2):
@@ -107,6 +107,51 @@ class Ads92x4(LiteXModule):
         )
 
         self.comb += self.pads.sclk.eq(ClockSignal() & self.fsm.ongoing("READ"))
+        
+        
+class Ads92x4_Stream(LiteXModule):
+    def __init__(self, smp_clk_is_synchronous=True, oversampling=1, zone=2, fifo_depth=16):
+        super().__init__()
+        self.submodules.analog = analog = Ads92x4(
+            smp_clk_is_synchronous=True, oversampling=oversampling, zone=zone
+        )
+        self.pads = analog.pads
+        self.data_cha = analog.data_cha
+        self.data_chb = analog.data_chb
+        self.smp_clk = analog.smp_clk
+        self._smp_clk = analog.smp_clk_out
+        self.enable = Signal(reset=0)
+        self._valid = Signal(reset=0)
+
+        self.submodules.read_fifo = read_fifo = stream.SyncFIFO(
+            layout=[
+            ("data_a", 16),
+            ("data_b", 16),
+            ],
+            depth=fifo_depth,
+            buffered=True,
+        )
+        
+        self.comb += [
+            read_fifo.sink.data_a.eq(self.data_cha),
+            read_fifo.sink.data_b.eq(self.data_chb),
+            read_fifo.sink.valid.eq(self._valid & self.enable)
+        ]
+        
+        self._push_to_fifo_fsm = FSM(reset_state="IDLE")
+        self._push_to_fifo_fsm.act("IDLE",
+            If(self._smp_clk,
+                NextValue(self._valid, 1),
+                NextState("Wait for ready")
+            )
+        )
+        self._push_to_fifo_fsm.act("Wait for ready",
+            If(read_fifo.sink.ready,
+                NextValue(self._valid, 0),
+                NextState("IDLE")
+            )
+        )
+
 
 
 if __name__ == "__main__":

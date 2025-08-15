@@ -10,6 +10,10 @@ TOP:=$(shell realpath --relative-to $(CURDIR)/../ $(CURDIR))
 ROOT:=$(shell realpath $(CURDIR)/../..)
 BIOS:=CUSTOM
 
+L2_SIZE:=8192
+CPU_TYPE:=vexriscv
+CPU_VARIANT:=standard
+
 ifeq (${BIOS}, CUSTOM)
   BIOS_DEP=build/app.bin
   INTEGRATED_ROM_INIT=--integrated-rom-init=build/app.bin
@@ -29,11 +33,10 @@ bitstream:
 
 build/radiona_ulx3s/software/include/generated/variables.mak: Makefile
 	@echo "Generating variables.mak"
-	PYTHONPATH=/src PATH=/usr/bin:${PATH} python3 top.py --build --no-compile-gateware --integrated-rom-size=131072
+	PYTHONPATH=/src PATH=/usr/bin:${PATH} python3 top.py --build --no-compile-gateware --integrated-rom-size=131072 --l2-size=${L2_SIZE} --cpu-type=${CPU_TYPE} --cpu-variant=${CPU_VARIANT}
 
 build/radiona_ulx3s/gateware/radiona_ulx3s.bit: *.py /src/fusion_rtl/**/*.py Makefile ${BIOS_DEP}
-	PYTHONPATH=/src PATH=/usr/bin:${PATH} python3 top.py --build ${INTEGRATED_ROM_INIT} 
-#--custom-spi-loopback
+	PYTHONPATH=/src PATH=/usr/bin:${PATH} python3 top.py --build ${INTEGRATED_ROM_INIT} --l2-size=${L2_SIZE} --cpu-type=${CPU_TYPE} --cpu-variant=${CPU_VARIANT}
 
 _bitstream: build/radiona_ulx3s/gateware/radiona_ulx3s.bit
 

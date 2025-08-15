@@ -129,11 +129,39 @@ static int spisdcard_select(void) {
 /* SPI SDCard bytes Xfer functions                                       */
 /*-----------------------------------------------------------------------*/
 
-static inline void _spisdcardwrite_bytes_aligned32(uint8_t* buf, uint16_t n) {
+static inline void _spisdcardwrite_16x4_bytes_aligned32(uint8_t* buf) {
     uint16_t i;
-    for (i=0; i<n; i+=4) {
-        spi_write32(*(uint32_t*)(buf[i]));
+    uint32_t* pbuf = (uint32_t*)buf;
+    spi_write32(pbuf[0]);
+    spi_write32(pbuf[1]);
+    spi_write32(pbuf[2]);
+    spi_write32(pbuf[3]);
+    spi_write32(pbuf[4]);
+    spi_write32(pbuf[5]);
+    spi_write32(pbuf[6]);
+    spi_write32(pbuf[7]);
+    spi_write32(pbuf[8]);
+    spi_write32(pbuf[9]);
+    spi_write32(pbuf[10]);
+    spi_write32(pbuf[11]);
+    spi_write32(pbuf[12]);
+    spi_write32(pbuf[13]);
+    spi_write32(pbuf[14]);
+    spi_write32(pbuf[15]);
+}
+
+static inline void _spisdcardwrite_bytes_aligned32(uint8_t *buf, uint16_t n) {
+  uint16_t i;
+  if (n % 64 == 0) {
+    for (i = 0; i < n ; i+=64) {
+      _spisdcardwrite_16x4_bytes_aligned32(&buf[i]);
     }
+  } else {
+    uint32_t *pbuf = (uint32_t *)buf;
+    for (i = 0; i < n / 4; i++) {
+      spi_write32(pbuf[i]);
+    }
+  }
 }
 
 static void spisdcardwrite_bytes(uint8_t* buf, uint16_t n) {
@@ -324,7 +352,9 @@ uint8_t custom_spisdcard_init(void) {
     uint16_t timeout;
 
     timeout = 1000;
-    custom_spi_clkdiv_csr_write(-1);
+    #ifndef SPISDCARD_NO_CLK_DIV
+    custom_spi_clkdiv_csr_write(0);
+    #endif
     while (timeout) {
         /* Set SDCard in SPI Mode (generate 80 dummy clocks) */
         CS_HIGH();
@@ -377,7 +407,9 @@ uint8_t custom_spisdcard_init(void) {
         #endif
         return 0;
     }
+    #ifndef SPISDCARD_NO_CLK_DIV
     custom_spi_clkdiv_csr_write(0);
+    #endif
     return 1;
 }
 

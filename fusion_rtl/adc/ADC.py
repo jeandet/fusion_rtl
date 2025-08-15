@@ -13,14 +13,14 @@ from litex.soc.interconnect import stream
 from litex.soc.interconnect import wishbone
 
 
-from .ads92x4 import Ads92x4
+from .ads92x4 import Ads92x4_Stream
 from ..dsp.simple_iir import SimpleIIR
 from ..streams import Stream2CSR, TestStreamCounter
 from ..clk import ClkDiv
 
 
 class ADC(LiteXModule):
-    def __init__(self, sys_clk_freq, oversampling=1, zone=2, fifo_depth=4096, target_freq=3e6):
+    def __init__(self, sys_clk_freq, oversampling=1, zone=2, fifo_depth=4096, target_freq=3e6, with_dma=False, soc=None):
         """
         ADC module for interfacing with the ADS92x4 ADC chip.
         
@@ -40,50 +40,38 @@ class ADC(LiteXModule):
         assert target_freq <= 3e6, "Target frequency must be less than or equal to 3MHz for ADS92x4"
         
         self.sys_clk_freq = sys_clk_freq
-        analog = Ads92x4(
-            smp_clk_is_synchronous=True, oversampling=oversampling, zone=zone
+        self.submodules.analog =analog = Ads92x4_Stream(
+            smp_clk_is_synchronous=True, oversampling=oversampling, zone=zone, fifo_depth=fifo_depth
         )
         self.pads = analog.pads
-        self.data_cha = analog.data_cha
-        self.data_chb = analog.data_chb
-        self.smp_clk = analog.smp_clk_out
-        self.reset = Signal(reset=1)
         self.enable = Signal(reset=0)
         self.overflow = Signal(reset=0)
-        self._ctrl_reg = CSRStorage(1, reset=0)
+        self.enable_csr = CSRStorage(fields=[
+            CSRField("enable", size=1, reset=0, description="Enable ADC data acquisition."),
+        ])
 
-        read_fifo = stream.SyncFIFO(
-            layout=[
-            ("data_a", 16),
-            ("data_b", 16),
-            ],
-            depth=fifo_depth,
-            buffered=True,
-        )
-        
-        self._stream_to_csr = Stream2CSR(read_fifo.source)
-
-        # Connect FIFO and CSR signals
         self.comb += [
-            read_fifo.sink.data_a.eq(self.data_cha),
-            read_fifo.sink.data_b.eq(self.data_chb),
+            self.enable.eq(self.enable_csr.fields.enable),
+            self.analog.enable.eq(self.enable)
         ]
-        
-        self._push_to_fifo_fsm = FSM(reset_state="IDLE")
-        self._push_to_fifo_fsm.act("IDLE",
-            If(self.smp_clk,
-                read_fifo.sink.valid.eq(1),
-                NextState("Wait for ready")
-            )
-        )
-        self._push_to_fifo_fsm.act("Wait for ready",
-            If(read_fifo.sink.ready,
-                read_fifo.sink.valid.eq(0),
-                NextState("IDLE")
-            )
-        )
 
-        self.submodules += [analog, read_fifo]
+        if not with_dma:
+            self._stream_to_csr = Stream2CSR(analog.read_fifo.source)
+        else:
+            bus = wishbone.Interface(
+                        data_width = soc.bus.data_width,
+                        adr_width  = soc.bus.get_address_width(standard="wishbone"),
+                        addressing = "word",
+                    )
+            self._dma_writer = WishboneDMAWriter(bus=bus, with_csr=True, endianness=soc.cpu.endianness)
+            self.comb += [
+                self._dma_writer.sink.data.eq(Cat(analog.read_fifo.source.data_a, analog.read_fifo.source.data_b)),
+                self._dma_writer.sink.valid.eq(analog.read_fifo.source.valid),
+                analog.read_fifo.source.ready.eq(self._dma_writer.sink.ready)
+            ]
+            dma_bus = getattr(soc, "dma_bus", soc.bus)
+            dma_bus.add_master(master=bus)
+            
 
         divisor = int(self.sys_clk_freq // target_freq)
 

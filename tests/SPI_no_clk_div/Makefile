@@ -6,7 +6,7 @@ WAVES = 1
 
 VITALS_PATH = /usr/share/yosys/ecp5
 VERILOG_INCLUDE_DIRS = $(VITALS_PATH)
-VERILOG_SOURCES =  $(CURDIR)/sim_build/SPI.v $(VITALS_PATH)/cells_sim.v 
+VERILOG_SOURCES =  $(CURDIR)/sim_build/SPI.v $(VITALS_PATH)/cells_sim.v
 COMPILE_ARGS += -pfileline=1 -DICARUS_VCD
 
 TOPLEVEL = top
@@ -17,7 +17,7 @@ PYTHONPATH=$(ROOT)
 
 $(CURDIR)/sim_build/SPI.v: $(ROOT)/fusion_rtl/sdcard/spi.py
 	mkdir -p sim_build
-	cd sim_build && PYTHONPATH=$(PYTHONPATH) python $(ROOT)/fusion_rtl/sdcard/spi.py --output SPI.v --output-dir .
+	cd sim_build && PYTHONPATH=$(PYTHONPATH) python $(ROOT)/fusion_rtl/sdcard/spi.py --no-clk-div --output SPI.v --output-dir .
 
 include $(shell cocotb-config --makefiles)/Makefile.sim
 

@@ -17,7 +17,7 @@ ADD ulx3s_patch.patch /tmp/ulx3s_patch.patch
 
 RUN chmod +x /usr/bin/litex_setup.py &&\
     dnf update -y && \
-    dnf install -y python3-pip meson patch make git gcc-riscv32-linux-gnu.x86_64 gcc-c++-riscv32-linux-gnu.x86_64 binutils-riscv32-linux-gnu.x86_64 &&\
+    dnf install -y python3-pip wget meson patch make git gcc-riscv32-linux-gnu.x86_64 gcc-c++-riscv32-linux-gnu.x86_64 binutils-riscv32-linux-gnu.x86_64 &&\
     mkdir -p /opt/litex_install && cd /opt/litex_install &&\
     /usr/bin/python3 /usr/bin/litex_setup.py --init --install --config=full &&\
     cd /opt/litex_install/litex-boards &&\

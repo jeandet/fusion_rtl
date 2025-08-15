@@ -49,43 +49,7 @@ _extra_ios = [
                 "miso_b",
                 Pins("C17"),
             ),
-    ),
-    (
-        "sdcard_1", 0,
-        Subsignal("clk",  Pins("J1"),Misc("DRIVE=8")),
-        Subsignal("cmd",  Pins("J3"), Misc("PULLMODE=UP DRIVE=8")),
-        Subsignal("data", Pins("K2 K1 H2 H1"), Misc("PULLMODE=UP DRIVE=8")),
-        Misc("SLEWRATE=FAST"),
-        IOStandard("LVCMOS33"),
-    ),
-    (
-        "spisdcard_1", 0,
-        Subsignal("clk",  Pins("J1"), Misc("DRIVE=8")),
-        Subsignal("mosi", Pins("J3"), Misc("PULLMODE=UP DRIVE=8")),
-        Subsignal("cs_n", Pins("H1"), Misc("PULLMODE=UP DRIVE=8")),
-        Subsignal("miso", Pins("K2"), Misc("PULLMODE=UP DRIVE=8")),
-        Misc("SLEWRATE=FAST"),
-        IOStandard("LVCMOS33"),
-    ),
-    (
-        "sdcard_2", 0,
-        Subsignal("clk",  Pins("A4"), Misc("DRIVE=8")),
-        Subsignal("cmd",  Pins("A6"), Misc("PULLMODE=UP DRIVE=8")),
-        Subsignal("data", Pins("A2 C4 C8 C6"), 
-                  Misc("PULLMODE=UP DRIVE=8")),
-        IOStandard("LVCMOS33"),
-        Misc("SLEW=FAST"),
-    ),
-    (
-        "spisdcard_2", 0,
-        Subsignal("clk",  Pins("A4")),
-        Subsignal("mosi", Pins("A6"), Misc("PULLMODE=UP DRIVE=4")),
-        Subsignal("cs_n", Pins("C6"), Misc("PULLMODE=UP DRIVE=4")),
-        Subsignal("miso", Pins("A2"), Misc("PULLMODE=UP DRIVE=4")),
-        Misc("SLEWRATE=FAST"),
-        IOStandard("LVCMOS33"),
-    ),
-    
+    )
 ]
 
 class Top(BaseSoC):
@@ -96,19 +60,19 @@ class Top(BaseSoC):
         # self.add_sdcard(software_debug=True)
         # self.add_spi_sdcard(name="spisdcard_2")
         # self.add_spi_sdcard(software_debug=True)
-        self.add_custom_spi(loopback=kwargs.get("custom_spi_loopback", False))
+        self.add_custom_spi(loopback=kwargs.get("custom_spi_loopback", False), no_clk_div=kwargs.get("custom_spi_no_clk_div", False))
         self.add_timer(name="timer1")
         self.add_adc()
         
-    def add_custom_spi(self, software_debug=True, loopback=False):
+    def add_custom_spi(self, software_debug=True, loopback=False, no_clk_div=False):
         from fusion_rtl.sdcard.spi import SPI 
-        self.submodules.custom_spi = SPI(sys_clk_freq=self.sys_clk_freq)
+        self.submodules.custom_spi = SPI(sys_clk_freq=self.sys_clk_freq, with_clk_div=not no_clk_div)
         if loopback:
             self.comb += [
                 self.custom_spi.miso.eq(self.custom_spi.mosi)
             ]
         else:
-            spi_pads = self.platform.request("spisdcard_1")
+            spi_pads = self.platform.request("spisdcard")
             self.comb += [
                 spi_pads.mosi.eq(self.custom_spi.mosi),
                 self.custom_spi.miso.eq(spi_pads.miso),
@@ -118,17 +82,23 @@ class Top(BaseSoC):
         self.add_constant("CUSTOM_SPI")
         if software_debug:
             self.add_constant("SPISDCARD_DEBUG")
-            
+        if no_clk_div:
+            self.add_constant("SPISDCARD_NO_CLK_DIV")
 
     def add_adc(self):
         from fusion_rtl.adc import ADC
         
         self.submodules.adc = ADC(
             sys_clk_freq=self.sys_clk_freq,
-            oversampling=1,
+            oversampling=4,
             zone=2,
-            fifo_depth=16
+            target_freq=3e6,
+            fifo_depth=4096,
+            with_dma=True,
+            soc=self
         )
+        self.add_constant("ADC_WITH_DMA")
+        self.add_constant("ADC")
         adc_pads = self.platform.request("ADC")
         self.comb += [
             adc_pads.conv_st.eq(self.adc.pads.conv_st),
@@ -142,21 +112,24 @@ class Top(BaseSoC):
         self.add_csr("adc")
         
         
+        
 
 
 def main():
     from litex.build.parser import LiteXArgumentParser
     parser = LiteXArgumentParser(platform=radiona_ulx3s.Platform, description="LiteX SoC on ULX3S")
     parser.add_target_argument("--custom-spi-loopback", action="store_true", default=False, help="Enable custom SPI loopback mode.")
+    parser.add_target_argument("--custom-spi-no-clk-div", action="store_true", default=True, help="Enable custom SPI no clock division mode, for faster data transfer.")
     args = parser.parse_args()
     soc = Top(
         device="LFE5U-85F",
         revision='2.0',
         toolchain= args.toolchain,
-        sys_clk_freq=50e6,
+        sys_clk_freq=60e6,
         sdram_module_cls="IS42S16160",
         sdram_rate="1:2",
         custom_spi_loopback=args.custom_spi_loopback,
+        custom_spi_no_clk_div=args.custom_spi_no_clk_div,
         **parser.soc_argdict)
     builder = Builder(soc, **parser.builder_argdict)
     if args.build:

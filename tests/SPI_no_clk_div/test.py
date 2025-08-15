@@ -129,7 +129,5 @@ async def test_SPI(dut):
     for _ in range(3):
         await RisingEdge(dut.sys_clk)
     dut.sys_rst.value = 0
-    for speed in range(7):
-        dut.csrfield_clk_div.value = speed
-        await test_write_auto_cs(dut, slave)
-        await test_write_manual_cs(dut, slave)
+    await test_write_auto_cs(dut, slave)
+    await test_write_manual_cs(dut, slave)

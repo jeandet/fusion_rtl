@@ -1,0 +1,28 @@
+[*]
+[*] GTKWave Analyzer v3.3.124 (w)1999-2025 BSI
+[*] Fri Aug 15 15:01:06 2025
+[*]
+[dumpfile] "sim_build/top.fst"
+[dumpfile_mtime] "Fri Aug 15 14:56:03 2025"
+[dumpfile_size] 2427
+[savefile] "wf_display.gtkw"
+[timestart] 0
+[size] 1920 1121
+[pos] -461 -262
+*-17.400000 51800 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[sst_width] 284
+[signals_width] 210
+[sst_expanded] 1
+[sst_vpaned_height] 337
+@29
+top.spi_ready
+@28
+top.spi_cs
+top.spi_clock
+top.spi_miso
+top.spi_mosi
+@22
+top.spi_data_wr_8[7:0]
+top.spi_data_rd[31:0]
+[pattern_trace] 1
+[pattern_trace] 0
