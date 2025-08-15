@@ -3,7 +3,7 @@ BUILD_DIR?=../build/
 include $(BUILD_DIR)/software/include/generated/variables.mak
 include $(SOC_DIRECTORY)/software/common.mak
 
-OBJECTS   = crt0.o main.o
+OBJECTS   = crt0.o main.o sdcard.o custom_sdcard.o
 #ifdef WITH_CXX
 #	OBJECTS += hellocpp.o
 #	CFLAGS += -DWITH_CXX
@@ -39,8 +39,6 @@ endif
 
 # pull in dependency info for *existing* .o files
 -include $(OBJECTS:.o=.d)
-
-donut.o: CFLAGS   += -w
 
 VPATH = $(BIOS_DIRECTORY):$(BIOS_DIRECTORY)/cmds:$(CPU_DIRECTORY)
 

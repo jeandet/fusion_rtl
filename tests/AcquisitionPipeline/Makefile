@@ -12,9 +12,11 @@ TOPLEVEL = top
 
 MODULE = test
 
+include $(shell cocotb-config --makefiles)/Makefile.sim
+
 $(CURDIR)/build/AcquisitionPipeline.v: $(CURDIR)/../../HDL/acquisition_pipeline.py
 	mkdir -p build
 	cd build && PYTHONPATH=$(CURDIR)/../../HDL python $(CURDIR)/../../HDL/acquisition_pipeline.py
 
-include $(shell cocotb-config --makefiles)/Makefile.sim
+
 

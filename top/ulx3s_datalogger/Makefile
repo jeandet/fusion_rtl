@@ -32,7 +32,8 @@ build/radiona_ulx3s/software/include/generated/variables.mak: Makefile
 	PYTHONPATH=/src PATH=/usr/bin:${PATH} python3 top.py --build --no-compile-gateware --integrated-rom-size=131072
 
 build/radiona_ulx3s/gateware/radiona_ulx3s.bit: *.py /src/fusion_rtl/**/*.py Makefile ${BIOS_DEP}
-	PYTHONPATH=/src PATH=/usr/bin:${PATH} python3 top.py --build ${INTEGRATED_ROM_INIT}
+	PYTHONPATH=/src PATH=/usr/bin:${PATH} python3 top.py --build ${INTEGRATED_ROM_INIT} 
+#--custom-spi-loopback
 
 _bitstream: build/radiona_ulx3s/gateware/radiona_ulx3s.bit
 
