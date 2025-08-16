@@ -20,7 +20,7 @@ from ..clk import ClkDiv
 
 
 class ADC(LiteXModule):
-    def __init__(self, sys_clk_freq, oversampling=1, zone=2, fifo_depth=4096, target_freq=3e6, with_dma=False, soc=None):
+    def __init__(self, sys_clk_freq, oversampling=1, zone=2, fifo_depth=4096, target_freq=3e6, with_dma=False, soc=None, only_ch=None):
         """
         ADC module for interfacing with the ADS92x4 ADC chip.
         
@@ -38,42 +38,86 @@ class ADC(LiteXModule):
         assert fifo_depth > 0, "FIFO depth must be greater than 0"
         assert target_freq > 0, "Target frequency must be greater than 0"
         assert target_freq <= 3e6, "Target frequency must be less than or equal to 3MHz for ADS92x4"
-        
+        assert only_ch in [None, 'a', 'b', 'cha', 'chb', 0, 1], "Invalid channel selection"
+
         self.sys_clk_freq = sys_clk_freq
-        self.submodules.analog =analog = Ads92x4_Stream(
-            smp_clk_is_synchronous=True, oversampling=oversampling, zone=zone, fifo_depth=fifo_depth
-        )
-        self.pads = analog.pads
+        self.target_freq = target_freq
+        self.sampling_freq = target_freq / oversampling
+        self.oversampling = oversampling
+        self.zone = zone
+        
+
         self.enable = Signal(reset=0)
         self.overflow = Signal(reset=0)
+        
+        self.submodules.adc = adc = Ads92x4_Stream(
+            smp_clk_is_synchronous=True, oversampling=oversampling, zone=zone, fifo_depth=fifo_depth
+        )
+        self.adc = adc
+        self.pads = adc.pads
+
+        self.stream = adc.read_fifo.source
+
+        self.add_clk_gen()
+        self.add_enable_csr()
+        if with_dma:
+            self.add_dma_interface(soc, only_ch)
+        else:
+            self.add_stream_csr_interface()
+            
+        self.defines = {
+            "ADC_OVERSAMPLING": oversampling,
+            "ADC_ZONE": zone,
+            "ADC_ACTIVE_CHANNEL_COUNT": 1 if only_ch is not None else 2,
+            "ADC_SAMPLING_FREQUENCY": int(self.sampling_freq),
+            "ADC_FIFO_DEPTH": fifo_depth
+        }
+
+    def add_clk_gen(self):
+        divisor = int(self.sys_clk_freq // self.target_freq)
+        self.submodules.clk_div = clk_div = ClkDiv(MaxValue=divisor)
+        self.comb += self.adc.smp_clk.eq(clk_div.clk_out)
+        self.sampling_freq = self.sys_clk_freq / divisor / self.oversampling
+
+    def add_enable_csr(self):
         self.enable_csr = CSRStorage(fields=[
             CSRField("enable", size=1, reset=0, description="Enable ADC data acquisition."),
-        ])
+        ], name="enable")
 
         self.comb += [
             self.enable.eq(self.enable_csr.fields.enable),
-            self.analog.enable.eq(self.enable)
+            self.adc.enable.eq(self.enable)
         ]
 
-        if not with_dma:
-            self._stream_to_csr = Stream2CSR(analog.read_fifo.source)
-        else:
-            bus = wishbone.Interface(
-                        data_width = soc.bus.data_width,
-                        adr_width  = soc.bus.get_address_width(standard="wishbone"),
-                        addressing = "word",
-                    )
-            self._dma_writer = WishboneDMAWriter(bus=bus, with_csr=True, endianness=soc.cpu.endianness)
+    def add_dma_interface(self, soc, only_ch):
+        bus = wishbone.Interface(data_width=soc.bus.data_width, address_width=soc.bus.address_width, addressing='word')
+        self.dma = WishboneDMAWriter(bus=bus, with_csr=True, endianness=soc.cpu.endianness)
+        dma_bus = getattr(soc, "dma_bus", soc.bus)
+        dma_bus.add_master(master=bus)
+        
+        if only_ch is None:
             self.comb += [
-                self._dma_writer.sink.data.eq(Cat(analog.read_fifo.source.data_a, analog.read_fifo.source.data_b)),
-                self._dma_writer.sink.valid.eq(analog.read_fifo.source.valid),
-                analog.read_fifo.source.ready.eq(self._dma_writer.sink.ready)
+                self.dma.sink.data.eq(Cat(self.stream.data_a, self.stream.data_b)),
+                self.dma.sink.valid.eq(self.stream.valid),
+                self.stream.ready.eq(self.dma.sink.ready)
             ]
-            dma_bus = getattr(soc, "dma_bus", soc.bus)
-            dma_bus.add_master(master=bus)
-            
+        else:
+            self.submodules.up_conv = up_conv = stream.Converter(
+                nbits_from=16,
+                nbits_to=32
+            )
+            if only_ch.lower() in ('a', 'cha', 0):
+                ch= self.stream.data_a
+            else:
+                ch= self.stream.data_b
+            self.comb += [
+                self.dma.sink.data.eq(up_conv.source.data),
+                self.dma.sink.valid.eq(up_conv.source.valid),
+                up_conv.source.ready.eq(self.dma.sink.ready),
+                self.stream.ready.eq(up_conv.sink.ready),
+                up_conv.sink.valid.eq(self.stream.valid),
+                up_conv.sink.data.eq(ch)
+            ]
 
-        divisor = int(self.sys_clk_freq // target_freq)
-
-        self.submodules.clk_div = clk_div = ClkDiv(MaxValue=divisor)
-        self.comb += analog.smp_clk.eq(clk_div.clk_out)
+    def add_stream_csr_interface(self):
+        self._stream_to_csr = Stream2CSR(self.stream)

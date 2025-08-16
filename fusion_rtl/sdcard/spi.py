@@ -263,22 +263,26 @@ class SPI(LiteXModule):
             self._spi.start8bits.eq(self.data_write_8.re),
             self._spi.data_wr_8.eq(self.data_write_8.storage[0:8]),
             self._spi.start16bits.eq(self.data_write_16.re),
-            self._spi.data_wr_16.eq(self.data_write_16.storage[0:16]),
+            self._spi.data_wr_16.eq(
+                Cat(self.data_write_16.storage[8:16], self.data_write_16.storage[0:8])
+            ),
             self._spi.start32bits.eq(self.data_write_32.re),
-            self._spi.data_wr_32.eq(self.data_write_32.storage),
-            
+            self._spi.data_wr_32.eq(
+                Cat(
+                    self.data_write_32.storage[24:32],
+                    self.data_write_32.storage[16:24],
+                    self.data_write_32.storage[8:16],
+                    self.data_write_32.storage[0:8],
+                )
+            ),
             self.data_read_csr.status.eq(self._spi.data_rd),
-            
             self.status_csr.fields.ready.eq(self._spi.ready),
-            
-            
             self.mosi.eq(self._spi.mosi),
             self._spi.miso.eq(self.miso),
-            If(self.control_csr.fields.cs_auto,
-               self.cs.eq(self._spi.cs),
-            ).Else(
-               self.cs.eq(self.control_csr.fields.cs_value)
-            ),
+            If(
+                self.control_csr.fields.cs_auto,
+                self.cs.eq(self._spi.cs),
+            ).Else(self.cs.eq(self.control_csr.fields.cs_value)),
         ]
         
         

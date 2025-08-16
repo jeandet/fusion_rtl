@@ -88,17 +88,20 @@ class Top(BaseSoC):
     def add_adc(self):
         from fusion_rtl.adc import ADC
         
-        self.submodules.adc = ADC(
+        self.submodules.adc = adc = ADC(
             sys_clk_freq=self.sys_clk_freq,
             oversampling=4,
             zone=2,
             target_freq=3e6,
             fifo_depth=4096,
             with_dma=True,
-            soc=self
+            soc=self,
+            only_ch="cha"
         )
         self.add_constant("ADC_WITH_DMA")
         self.add_constant("ADC")
+        for key, value in adc.defines.items():
+            self.add_constant(key, value)
         adc_pads = self.platform.request("ADC")
         self.comb += [
             adc_pads.conv_st.eq(self.adc.pads.conv_st),

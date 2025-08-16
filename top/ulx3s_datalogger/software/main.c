@@ -13,7 +13,16 @@
 #include <liblitedram/sdram.h>
 #include <generated/csr.h>
 
+#define TARGET_DURATION (60*10) // 10 minutes
+#define TOTAL_SAMPLES (ADC_SAMPLING_FREQUENCY * TARGET_DURATION)
+#define BYTES_PER_SAMPLE (2)
+#define TOTAL_BLOCKS ((TOTAL_SAMPLES * ADC_ACTIVE_CHANNEL_COUNT * BYTES_PER_SAMPLE / 512)+1) // +1 for header
+
 #define SDCARD_TOTAL_BLOCKS (64*1024*1024*1024/512) // 64GB SDCard
+
+#if TOTAL_BLOCKS > SDCARD_TOTAL_BLOCKS
+#error "Total blocks exceed SDCard capacity"
+#endif
 
 #define DMA_BUFFER_SIZE (1024*1024*4)
 char DMA_buffer1[DMA_BUFFER_SIZE] __attribute__((section(".dma"), aligned(64)));
@@ -27,7 +36,29 @@ static void reboot_cmd(void)
 	ctrl_reset_write(1);
 }
 
-char block[512*8] __attribute__((aligned(4))) = "Hello, World @60Mbps!\n";
+char header[512] __attribute__((aligned(4)));
+
+void init_header(void)
+{
+    snprintf(header, sizeof(header),
+             "ULX3S Datalogger\n"
+             "Record duration= %d seconds\n"
+             "Sampling frequency= %d Hz\n"
+             "Oversampling= %d x\n"
+             "Zone= %d\n"
+             "Active channel count= %d\n"
+             "Total samples= %d\n"
+             "Bytes per sample= %d\n"
+             "Total blocks= %d\n",
+             TARGET_DURATION,
+             ADC_SAMPLING_FREQUENCY,
+             ADC_OVERSAMPLING,
+             ADC_ZONE,
+             ADC_ACTIVE_CHANNEL_COUNT,
+             TOTAL_SAMPLES,
+             BYTES_PER_SAMPLE,
+             TOTAL_BLOCKS);
+}
 
 void start_timer1(void)
 {
@@ -47,11 +78,11 @@ uint32_t elapsed_time(void)
 
 static inline void restart_adc_DMA(char *buffer, size_t size)
 {
-    adc__dma_writer_enable_write(0);
-    adc__dma_writer_base_write((uint64_t)buffer);
-    adc__dma_writer_length_write(size);
-    adc__dma_writer_enable_write(1);
-    adc_enable_csr_write(1);
+    adc_dma_enable_write(0);
+    adc_dma_base_write((uint64_t)buffer);
+    adc_dma_length_write(size);
+    adc_dma_enable_write(1);
+    adc_enable_write(1);
 }
 
 static inline uint32_t push_on_sdcard(char *buffer, size_t size, uint32_t block_address)
@@ -79,6 +110,16 @@ static inline void swap_buffers(char** current_buffer, char** next_buffer)
     *next_buffer = temp;
 }
 
+static inline void stop_leds(void)
+{
+    leds_out_write(0);
+}
+
+static inline void start_leds(void)
+{
+    leds_out_write(0xFF);
+}
+
 int main(void)
 {
 #ifdef CONFIG_CPU_HAS_INTERRUPT
@@ -87,6 +128,7 @@ int main(void)
 #endif	
     uart_init();
     sdram_init();
+    init_header();
 
 	putsnonl("ULX3S Datalogger\n");
 	putsnonl("Initializing SDCard...\n");
@@ -106,21 +148,34 @@ int main(void)
 	}
 	else 
     {
-		putsnonl("SDCard initialized successfully\n");
         uint32_t block_address = 0;
+		putsnonl("SDCard initialized successfully\n");
+        putsnonl(header);
+        putsnonl("Writing header at block address 0\n");
+        block_address = push_on_sdcard(header, sizeof(header), block_address);
+        putsnonl("Starting data acquisition...\n");
+        stop_leds();
         char* current_buffer = DMA_buffer1;
         char* next_buffer = DMA_buffer2;
         restart_adc_DMA(next_buffer, DMA_BUFFER_SIZE);
-        while (block_address < 1024 * 64)
+        while (block_address < TOTAL_BLOCKS)
         {
-           while (adc__dma_writer_done_read() == 0);
+           while (adc_dma_done_read() == 0);
            swap_buffers(&current_buffer, &next_buffer);
            restart_adc_DMA(next_buffer, DMA_BUFFER_SIZE);
            block_address = push_on_sdcard(current_buffer, DMA_BUFFER_SIZE, block_address);
         }
-        
         putsnonl("Data acquisition completed\n");
+        printf("Total blocks written: %d\n", block_address);
+        while (1)
+        {
+            start_leds();
+            busy_wait_us(1000000); // 1 second
+            stop_leds();
+            busy_wait_us(1000000); // 1 second
+        }
         
+
 	}
 
 	return 0;
