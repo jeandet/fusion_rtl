@@ -131,23 +131,23 @@ static int spisdcard_select(void) {
 
 static inline void _spisdcardwrite_16x4_bytes_aligned32(uint8_t* buf) {
     uint16_t i;
-    uint32_t* pbuf = (uint32_t*)buf;
-    spi_write32(pbuf[0]);
-    spi_write32(pbuf[1]);
-    spi_write32(pbuf[2]);
-    spi_write32(pbuf[3]);
-    spi_write32(pbuf[4]);
-    spi_write32(pbuf[5]);
-    spi_write32(pbuf[6]);
-    spi_write32(pbuf[7]);
-    spi_write32(pbuf[8]);
-    spi_write32(pbuf[9]);
-    spi_write32(pbuf[10]);
-    spi_write32(pbuf[11]);
-    spi_write32(pbuf[12]);
-    spi_write32(pbuf[13]);
-    spi_write32(pbuf[14]);
-    spi_write32(pbuf[15]);
+    uint32_t* pbuf32 = (uint32_t*)buf;
+    spi_write32(pbuf32[0]);
+    spi_write32(pbuf32[1]);
+    spi_write32(pbuf32[2]);
+    spi_write32(pbuf32[3]);
+    spi_write32(pbuf32[4]);
+    spi_write32(pbuf32[5]);
+    spi_write32(pbuf32[6]);
+    spi_write32(pbuf32[7]);
+    spi_write32(pbuf32[8]);
+    spi_write32(pbuf32[9]);
+    spi_write32(pbuf32[10]);
+    spi_write32(pbuf32[11]);
+    spi_write32(pbuf32[12]);
+    spi_write32(pbuf32[13]);
+    spi_write32(pbuf32[14]);
+    spi_write32(pbuf32[15]);
 }
 
 static inline void _spisdcardwrite_bytes_aligned32(uint8_t *buf, uint16_t n) {

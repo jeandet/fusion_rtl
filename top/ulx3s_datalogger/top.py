@@ -93,7 +93,7 @@ class Top(BaseSoC):
             oversampling=4,
             zone=2,
             target_freq=3e6,
-            fifo_depth=4096,
+            fifo_depth=4096*1,
             with_dma=True,
             soc=self,
             only_ch="cha"

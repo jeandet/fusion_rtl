@@ -13,12 +13,12 @@
 #include <liblitedram/sdram.h>
 #include <generated/csr.h>
 
-#define TARGET_DURATION (60*10) // 10 minutes
+#define TARGET_DURATION ((60llu*40llu)) // 40 minutes
 #define TOTAL_SAMPLES (ADC_SAMPLING_FREQUENCY * TARGET_DURATION)
 #define BYTES_PER_SAMPLE (2)
 #define TOTAL_BLOCKS ((TOTAL_SAMPLES * ADC_ACTIVE_CHANNEL_COUNT * BYTES_PER_SAMPLE / 512)+1) // +1 for header
 
-#define SDCARD_TOTAL_BLOCKS (64*1024*1024*1024/512) // 64GB SDCard
+#define SDCARD_TOTAL_BLOCKS (64llu*1024llu*1024llu*1024llu/512) // 64GB SDCard
 
 #if TOTAL_BLOCKS > SDCARD_TOTAL_BLOCKS
 #error "Total blocks exceed SDCard capacity"
@@ -42,22 +42,22 @@ void init_header(void)
 {
     snprintf(header, sizeof(header),
              "ULX3S Datalogger\n"
-             "Record duration= %d seconds\n"
-             "Sampling frequency= %d Hz\n"
+             "Record duration= %llu seconds\n"
+             "Sampling frequency= %llu Hz\n"
              "Oversampling= %d x\n"
              "Zone= %d\n"
              "Active channel count= %d\n"
-             "Total samples= %d\n"
+             "Total samples= %llu\n"
              "Bytes per sample= %d\n"
-             "Total blocks= %d\n",
-             TARGET_DURATION,
-             ADC_SAMPLING_FREQUENCY,
+             "Total blocks= %llu\n",
+            (uint64_t)TARGET_DURATION,
+            (uint64_t)ADC_SAMPLING_FREQUENCY,
              ADC_OVERSAMPLING,
              ADC_ZONE,
              ADC_ACTIVE_CHANNEL_COUNT,
-             TOTAL_SAMPLES,
+            (uint64_t)TOTAL_SAMPLES,
              BYTES_PER_SAMPLE,
-             TOTAL_BLOCKS);
+             (uint64_t)TOTAL_BLOCKS);
 }
 
 void start_timer1(void)
@@ -88,11 +88,12 @@ static inline void restart_adc_DMA(char *buffer, size_t size)
 static inline uint32_t push_on_sdcard(char *buffer, size_t size, uint32_t block_address)
 {
     // Write the contents of the DMA buffer to the SDCard
-    if (sd_write_blocks(buffer, block_address, size / 512) == 0)
+    uint32_t blocks_to_write = size / 512;
+    if (sd_write_blocks(buffer, block_address, blocks_to_write) == 0)
     {
         putsnonl("Failed to write DMA buffer to SDCard\n");
     }
-    return block_address + (size / 512);
+    return block_address + blocks_to_write;
 }
 
 static void test_sdcard_write_speed(char *buffer, size_t size)
