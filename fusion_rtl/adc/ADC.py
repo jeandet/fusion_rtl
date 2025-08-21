@@ -13,7 +13,7 @@ from litex.soc.interconnect import stream
 from litex.soc.interconnect import wishbone
 
 
-from .ads92x4 import Ads92x4_Stream
+from .ads92x4 import Ads92x4_Stream_Avg
 from ..dsp.simple_iir import SimpleIIR
 from ..streams import Stream2CSR, TestStreamCounter
 from ..clk import ClkDiv
@@ -50,13 +50,13 @@ class ADC(LiteXModule):
         self.enable = Signal(reset=0)
         self.overflow = Signal(reset=0)
         
-        self.submodules.adc = adc = Ads92x4_Stream(
+        self.submodules.adc = adc = Ads92x4_Stream_Avg(
             smp_clk_is_synchronous=True, oversampling=oversampling, zone=zone, fifo_depth=fifo_depth
         )
         self.adc = adc
         self.pads = adc.pads
 
-        self.stream = adc.read_fifo.source
+        self.source = adc.source
 
         self.add_clk_gen()
         self.add_enable_csr()
@@ -68,7 +68,7 @@ class ADC(LiteXModule):
         self.defines = {
             "ADC_OVERSAMPLING": oversampling,
             "ADC_ZONE": zone,
-            "ADC_ACTIVE_CHANNEL_COUNT": 1 if only_ch is not None else 2,
+            "ADC_ACTIVE_CHANNEL_COUNT": 2 if only_ch is None else 1,
             "ADC_SAMPLING_FREQUENCY": int(self.sampling_freq),
             "ADC_FIFO_DEPTH": fifo_depth
         }
@@ -77,7 +77,7 @@ class ADC(LiteXModule):
         divisor = int(self.sys_clk_freq // self.target_freq)
         self.submodules.clk_div = clk_div = ClkDiv(MaxValue=divisor)
         self.comb += self.adc.smp_clk.eq(clk_div.clk_out)
-        self.sampling_freq = self.sys_clk_freq / divisor / self.oversampling
+        self.sampling_freq = self.sys_clk_freq / (divisor * self.oversampling)
 
     def add_enable_csr(self):
         self.enable_csr = CSRStorage(fields=[
@@ -97,9 +97,9 @@ class ADC(LiteXModule):
         
         if only_ch is None:
             self.comb += [
-                self.dma.sink.data.eq(Cat(self.stream.data_a, self.stream.data_b)),
-                self.dma.sink.valid.eq(self.stream.valid),
-                self.stream.ready.eq(self.dma.sink.ready)
+                self.dma.sink.data.eq(Cat(self.source.data_a, self.source.data_b)),
+                self.dma.sink.valid.eq(self.source.valid),
+                self.source.ready.eq(self.dma.sink.ready)
             ]
         else:
             self.submodules.up_conv = up_conv = stream.Converter(
@@ -107,15 +107,15 @@ class ADC(LiteXModule):
                 nbits_to=32
             )
             if only_ch.lower() in ('a', 'cha', 0):
-                ch= self.stream.data_a
+                ch= self.source.data_a
             else:
-                ch= self.stream.data_b
+                ch= self.source.data_b
             self.comb += [
                 self.dma.sink.data.eq(up_conv.source.data),
                 self.dma.sink.valid.eq(up_conv.source.valid),
                 up_conv.source.ready.eq(self.dma.sink.ready),
-                self.stream.ready.eq(up_conv.sink.ready),
-                up_conv.sink.valid.eq(self.stream.valid),
+                self.source.ready.eq(up_conv.sink.ready),
+                up_conv.sink.valid.eq(self.source.valid),
                 up_conv.sink.data.eq(ch)
             ]
 

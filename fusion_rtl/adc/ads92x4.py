@@ -122,6 +122,12 @@ class Ads92x4_Stream(LiteXModule):
         self._smp_clk = analog.smp_clk_out
         self.enable = Signal(reset=0)
         self._valid = Signal(reset=0)
+        self.source = stream.Endpoint(
+            [
+                ("data_a", 16),
+                ("data_b", 16),
+            ]
+        )
 
         self.submodules.read_fifo = read_fifo = stream.SyncFIFO(
             layout=[
@@ -129,13 +135,15 @@ class Ads92x4_Stream(LiteXModule):
             ("data_b", 16),
             ],
             depth=fifo_depth,
-            buffered=True,
+            buffered=True
         )
         
+        
         self.comb += [
+            self.read_fifo.source.connect(self.source),
             read_fifo.sink.data_a.eq(self.data_cha),
             read_fifo.sink.data_b.eq(self.data_chb),
-            read_fifo.sink.valid.eq(self._valid & self.enable)
+            read_fifo.sink.valid.eq(self._valid & self.enable),
         ]
         
         self._push_to_fifo_fsm = FSM(reset_state="IDLE")
@@ -152,6 +160,83 @@ class Ads92x4_Stream(LiteXModule):
             )
         )
 
+class Ads92x4_Stream_Avg(LiteXModule):
+    def __init__(self, smp_clk_is_synchronous=True, oversampling=1, zone=2, fifo_depth=16):
+        super().__init__()
+        self.submodules.analog = analog = Ads92x4_Stream(
+            smp_clk_is_synchronous=True, oversampling=1, zone=zone, fifo_depth=fifo_depth
+        )
+        self.pads = analog.pads
+        self.data_cha = Signal(16)
+        self.data_chb = Signal(16)
+        self._avg_chan_a = Signal(18)
+        self._avg_chan_b = Signal(18)
+        self._chan_a_in = Signal(18)
+        self._chan_b_in = Signal(18)
+        self.sum_cnt = Signal(max=4, reset=0)
+        self.smp_clk = analog.smp_clk
+        self.enable = Signal(reset=0)
+        self._valid = Signal(reset=0)
+        self.source = stream.Endpoint(
+            [
+                ("data_a", 16),
+                ("data_b", 16),
+            ]
+        )
+
+        self.submodules.read_fifo = read_fifo = stream.SyncFIFO(
+            layout=[
+            ("data_a", 16),
+            ("data_b", 16),
+            ],
+            depth=fifo_depth,
+            buffered=True
+        )
+        
+        self.comb += [
+            read_fifo.sink.data_a.eq(self.data_cha),
+            read_fifo.sink.data_b.eq(self.data_chb),
+            analog.enable.eq(self.enable),
+            read_fifo.sink.valid.eq(self._valid),
+            read_fifo.source.connect(self.source)
+        ]
+        
+        self._push_to_fifo_fsm = FSM(reset_state="IDLE")
+        self._push_to_fifo_fsm.act("IDLE",
+            If(analog.source.valid,
+                NextState("SUM"),
+                NextValue(analog.source.ready, 0),
+                NextValue(self._chan_a_in, Cat(analog.source.data_a, 2*[analog.source.data_a[-1]])),
+                NextValue(self._chan_b_in, Cat(analog.source.data_b, 2*[analog.source.data_b[-1]]))
+            ).Else(
+                NextValue(analog.source.ready, 1)
+            ),
+            If(self.sum_cnt == 0,
+                NextValue(self._avg_chan_a, 0),
+                NextValue(self._avg_chan_b, 0),
+            )
+        )
+        self._push_to_fifo_fsm.act("SUM",
+            NextValue(self._avg_chan_a, self._avg_chan_a + self._chan_a_in),
+            NextValue(self._avg_chan_b, self._avg_chan_b + self._chan_b_in),
+            If(self.sum_cnt < (oversampling - 1),
+                NextValue(self.sum_cnt, self.sum_cnt + 1),
+                NextState("IDLE")
+            ).Else(
+                NextValue(self.sum_cnt, 0),
+                NextValue(self.data_cha, self._avg_chan_a[2:]),
+                NextValue(self.data_chb, self._avg_chan_b[2:]),
+                NextValue(self._valid, 1),
+                NextState("WAIT_FOR_READY")
+            )
+        )
+        self._push_to_fifo_fsm.act("WAIT_FOR_READY",
+            If(read_fifo.sink.ready,
+                NextState("IDLE"),
+                NextValue(self._valid, 0),
+                NextValue(analog.source.ready, 1)
+            )
+        )
 
 
 if __name__ == "__main__":
